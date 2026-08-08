@@ -13,6 +13,23 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.widget.EditText;
 
+/**
+ * FIXED VERSION v2 — RuleEditText.java
+ * ------------------------------------
+ * Fix 1 (original): onTouchEvent() dropped touch events when the tap was not
+ *   on a text line (or the editor was EMPTY). Returning false meant the
+ *   EditText never received the tap: no focus, no cursor, no soft keyboard.
+ *   -> now falls back to super.onTouchEvent().
+ * Fix 2 (v2): isTouchOnText() no longer restricts gestures to text lines —
+ *   the WHOLE editor area is interactive (focus / cursor placement / IME),
+ *   so taps on the line-number gutter, trailing whitespace or blank areas
+ *   behave like a normal EditText.
+ *
+ * Companion layout fix (activity_rule_config.xml): add
+ *   android:fillViewport="true"  to the HorizontalScrollView so the editor
+ *   fills the whole visible area (otherwise only the content-height strip at
+ *   the top is actually clickable).
+ */
 public class RuleEditText extends EditText {
     private static final float MIN_TEXT_SIZE_SP = 9f;
     private static final float MAX_TEXT_SIZE_SP = 16f;
@@ -98,13 +115,13 @@ public class RuleEditText extends EditText {
             allowLongPressSelection = textGestureActive;
             setLongClickable(allowLongPressSelection);
             if (!textGestureActive) {
-                return false;
+                return super.onTouchEvent(event);
             }
         }
 
         if (!textGestureActive) {
             resetTextGestureIfFinished(event);
-            return false;
+            return super.onTouchEvent(event);
         }
 
         scaleDetector.onTouchEvent(event);
@@ -167,32 +184,10 @@ public class RuleEditText extends EditText {
     }
 
     private boolean isTouchOnText(MotionEvent event) {
-        Layout layout = getLayout();
-        CharSequence text = getText();
-        if (layout == null || TextUtils.isEmpty(text)) {
-            return false;
-        }
-        int lineCount = layout.getLineCount();
-        if (lineCount <= 0) {
-            return false;
-        }
-
-        float y = event.getY() + getScrollY() - getTotalPaddingTop();
-        if (y < 0 || y > layout.getLineBottom(lineCount - 1)) {
-            return false;
-        }
-
-        int line = layout.getLineForVertical((int) y);
-        if (line < 0 || line >= lineCount) {
-            return false;
-        }
-
-        int start = layout.getLineStart(line);
-        int end = layout.getLineEnd(line);
-
-        float x = event.getX() + getScrollX() - getTotalPaddingLeft();
-        int slop = dp(8);
-        return x >= layout.getLineLeft(line) - slop || isBlankLine(text, start, end) && x >= -slop;
+        // The whole editor area is a text-gesture area:
+        // single tap -> EditText default handling (focus / cursor / IME),
+        // pinch -> font size zoom. No need to restrict to text lines.
+        return true;
     }
 
     private boolean isBlankLine(CharSequence text, int start, int end) {
